@@ -1,0 +1,102 @@
+---
+title: "Econ 725: Machine Learning, Hw 1"
+author: "Greg Kirwin"
+date: "9/28/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F,tidy.opts=list(width.cutoff=70),tidy=T) # allow text wrapping
+library(data.table)
+library(knitr)
+library(formatR) # necessary to wrap comments and source code
+library(ggplot2)
+```
+
+List of packages included[^1]: `data.table`, `ggplot2`, `stargazer`, `knitr`, `formatR`
+
+[^1]: Adapted from previous solutions written by Dan McLeod (Thanks, Dan!)
+
+## DB1B Data
+The data require us to use BTS's download tool, so unfortunately we need to manually select the columns we want and then load in the data ourselves. Note: in previous semesters, we also asked students to scale up the passenger data by 10 since this is a 10% sample of all data. We did not do that this time, so the results are a little different from last year.
+
+```{r db1b, echo = T}
+#keep a copy of raw data
+setwd("F:\\21fall\\725\\final project\\BTS data")
+
+# read in as a data.table format, only shows example for 2014Q3
+db1b_raw <- fread(file = "F:\\21fall\\725\\final project\\BTS data\\2014Q3_DB1B_MARKET.csv", header = T) 
+
+#lower the column names for ease of use
+colnames(db1b_raw) <- tolower(colnames(db1b_raw))
+
+#start removing carrier changes, multiply passengers by 10, remove small markets and high fares
+db1b <- db1b_raw[db1b_raw$tk_carrier_change == 0,]
+
+#using data.table for the first time here to eliminate small markets
+db1b = db1b[market_fare < 2500 & market_fare > 25,]
+db1b <- db1b[,tp_mt := 1*(sum(passengers)<(365/4)*20),by=.(origin_airport_id,dest_airport_id)][tp_mt==0]
+
+```
+
+Next, we want to create a carrier-level and a market-level dataset.
+
+````{r mkts, echo = T}
+#Market-airline level
+
+#need to weight the price and dist since passengers can be > 1
+db1b_air = db1b[, .(airline_avgprice = weighted.mean(market_fare,passengers), 
+                    airline_passangers = sum(passengers), 
+                    airline_avgdist = weighted.mean(market_distance,passengers)), 
+                by = .(origin_airport_id,dest_airport_id,ticket_carrier)]
+
+#Market level
+db1b_mkt = db1b[, .(mkt_avgprice = weighted.mean(market_fare, passengers),
+                    mkt_avgdist = weighted.mean(market_distance,passengers),
+                    mkt_numfirms = .N),
+                by = .(origin_airport_id,dest_airport_id)]
+
+#HHI: Need total passengers for each market, then get market shares, then square result
+markets = db1b_air[, .(hhi = sum(((airline_passangers/sum(airline_passangers))*100)^2) ), by = .(origin_airport_id, dest_airport_id)]
+
+#sort both (usually a good idea)
+db1b_mkt = db1b_mkt[with(db1b_mkt, order(origin_airport_id, dest_airport_id)),]
+markets = markets[with(markets, order(origin_airport_id, dest_airport_id)),]
+db1b_mkt$mkt_hhi = markets$hhi
+
+## Merge the market dataset with the populations.R data
+#load(file="supp_files/populations.R")
+
+#merged = merge(populations, db1b_mkt, by = c("origin_airport_id","dest_airport_id"))
+````
+
+
+### merge the airline level data and the market level data, only shows example for 2014Q3
+````{r plots, echo = T}
+merged = merge(db1b, db1b_mkt, by = c("origin_airport_id","dest_airport_id"))
+merged14q3 = merge(merged, db1b_air, by = c("origin_airport_id","dest_airport_id","ticket_carrier"))
+save(merged14q3,file = "merged14q3.r")
+
+````
+
+
+
+### only draw data of AA&US
+````{r plots, echo = T}
+AAUS12Q1 = merged12q1[ticket_carrier =="AA"| ticket_carrier=="US",]
+save(AAUS12Q1,file = "AAUS12Q1.r")
+AAUS12Q2 = merged12q2[ticket_carrier =="AA"| ticket_carrier=="US",]
+save(AAUS12Q2,file = "AAUS12Q2.r")
+AAUS12Q3 = merged12q3[ticket_carrier =="AA"| ticket_carrier=="US",]
+save(AAUS12Q3,file = "AAUS12Q3.r")
+AAUS12Q4 = merged12q4[ticket_carrier =="AA"| ticket_carrier=="US",]
+save(AAUS12Q4,file = "AAUS12Q4.r")
+AAUS14Q1 = merged14q1[ticket_carrier =="AA"| ticket_carrier=="US",]
+save(AAUS14Q1,file = "AAUS14Q1.r")
+AAUS14Q2 = merged14q2[ticket_carrier =="AA"| ticket_carrier=="US",]
+save(AAUS14Q2,file = "AAUS14Q2.r")
+AAUS14Q3 = merged14q3[ticket_carrier =="AA"| ticket_carrier=="US",]
+save(AAUS14Q3,file = "AAUS14Q3.r")
+AAUS14Q4 = merged14q4[ticket_carrier =="AA"| ticket_carrier=="US",]
+save(AAUS14Q4,file = "AAUS14Q4.r")
+````
