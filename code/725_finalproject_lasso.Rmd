@@ -1,0 +1,176 @@
+---
+title: "725_finalproject_lasso"
+author: "Manqi Zhou"
+date: "12/5/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r varselect}
+###################################
+#load data
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/AAUS12Q1.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/AAUS12Q2.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/AAUS12Q3.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/AAUS12Q4.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/AAUS14Q1.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/AAUS14Q2.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/AAUS14Q3.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/AAUS14Q4.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/merged12q1.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/merged12q2.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/merged12q3.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/merged12q4.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/merged14q1.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/merged14q2.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/merged14q3.R")
+load(file ="/Users/manyu/Desktop/725/finalproject/lasso/data/merged14q4.R")
+
+#change data.table back to data.frame
+library(tidyverse)
+class(AAUS12Q1) <- class(as.data.frame(AAUS12Q1))
+class(AAUS12Q2) <- class(as.data.frame(AAUS12Q2))
+class(AAUS12Q3) <- class(as.data.frame(AAUS12Q3))
+class(AAUS12Q4) <- class(as.data.frame(AAUS12Q4))
+class(AAUS14Q1) <- class(as.data.frame(AAUS14Q1))
+class(AAUS14Q2) <- class(as.data.frame(AAUS14Q2))
+class(AAUS14Q3) <- class(as.data.frame(AAUS14Q3))
+class(AAUS14Q4) <- class(as.data.frame(AAUS14Q4))
+
+###################################
+#allocate 50% for training, 50% for testing
+set.seed(777)
+train12Q1 <- sample(nrow(AAUS12Q1), size = round(.5*(nrow(AAUS12Q1))) ) # set index
+train12Q2 <- sample(nrow(AAUS12Q2), size = round(.5*(nrow(AAUS12Q2))) ) 
+train12Q3 <- sample(nrow(AAUS12Q3), size = round(.5*(nrow(AAUS12Q3))) ) 
+train12Q4 <- sample(nrow(AAUS12Q4), size = round(.5*(nrow(AAUS12Q4))) )   
+train14Q1 <- sample(nrow(AAUS14Q1), size = round(.5*(nrow(AAUS14Q1))) )   
+train14Q2 <- sample(nrow(AAUS14Q2), size = round(.5*(nrow(AAUS14Q2))) )   
+train14Q3 <- sample(nrow(AAUS14Q3), size = round(.5*(nrow(AAUS14Q3))) )   
+train14Q4 <- sample(nrow(AAUS14Q4), size = round(.5*(nrow(AAUS14Q4))) )   
+
+train_data <- rbind(AAUS12Q1[train12Q1,], AAUS12Q2[train12Q2,], AAUS12Q3[train12Q3,],
+                    AAUS12Q4[train12Q4,], AAUS14Q1[train14Q1,], AAUS14Q2[train14Q2,],
+                    AAUS14Q3[train12Q3,], AAUS14Q4[train14Q4,])
+
+test_data <- rbind(AAUS12Q1[-train12Q1,], AAUS12Q2[-train12Q2,], AAUS12Q3[-train12Q3,],
+                    AAUS12Q4[-train12Q4,], AAUS14Q1[-train14Q1,], AAUS14Q2[-train14Q2,],
+                    AAUS14Q3[-train12Q3,], AAUS14Q4[-train14Q4,])
+
+###################################
+#prepare
+#change variables type
+library(plyr)
+train_data$ticket_carrier_no <- as.numeric(revalue(train_data$ticket_carrier,
+               c("AA"=1, "US"=0)))
+test_data$ticket_carrier_no <- as.numeric(revalue(test_data$ticket_carrier,
+               c("AA"=1, "US"=0)))
+
+train_data$year[train_data$year == 2012] <- 0
+train_data$year[train_data$year == 2014] <- 1
+test_data$year[test_data$year == 2012] <- 0
+test_data$year[test_data$year == 2014] <- 1
+
+#normalize data
+#define Min-Max normalization function
+min_max_norm <- function(x){
+  (x-min(x))/(max(x)-min(x))
+}
+
+#apply Min-Max normalization to the following colunms
+colname <-  c("market_fare", "origin_airport_id", "dest_airport_id",
+              "ticket_carrier_no", "itin_id", "mkt_id", "market_coupons",
+              "year", "quarter", "passengers",
+              "market_distance", "mkt_avgprice", "mkt_avgdist",
+              "mkt_numfirms", "mkt_hhi", "airline_avgprice",
+              "airline_passangers", "airline_avgdist")
+
+train_data_norm <- as.data.frame(lapply(train_data[,colname], min_max_norm))
+test_data_norm <- as.data.frame(lapply(test_data[,colname], min_max_norm))
+###################################
+#lasso
+library(glmnet)
+library(Matrix)
+
+xtra <- model.matrix(market_fare ~ origin_airport_id + dest_airport_id + 
+                       ticket_carrier_no + itin_id + mkt_id + market_coupons +
+                       year + quarter +  passengers + 
+                       market_distance + mkt_avgprice + mkt_avgdist +
+                       mkt_numfirms + mkt_hhi + airline_avgprice + 
+                       airline_passangers + airline_avgdist, train_data_norm)
+ytra <- train_data_norm$market_fare
+xtes <- model.matrix(market_fare ~ origin_airport_id + dest_airport_id + 
+                       ticket_carrier_no + itin_id + mkt_id + market_coupons +
+                       year + quarter +  passengers + 
+                       market_distance + mkt_avgprice + mkt_avgdist +
+                       mkt_numfirms + mkt_hhi + airline_avgprice + 
+                       airline_passangers + airline_avgdist,test_data_norm)
+ytes <- test_data_norm$market_fare
+
+lambdas <- seq(0, 0.01, by = .0001)
+
+lasso.mod <- glmnet(xtra, ytra, alpha = 1, lamda = lambdas)
+plot(lasso.mod)
+
+###################################
+#10-folds cv
+set.seed(1)
+
+cv.out <- cv.glmnet(xtra, ytra, type.measure = "mse", nfolds = 10, alpha = 1)
+plot(cv.out)
+points(log(cv.out[["lambda"]]), cv.out[["cvm"]], col = "pink", cex = 1, pch = 20)
+
+bestlambda <- cv.out$lambda.min
+lasso.pred <- predict(lasso.mod, s = bestlambda, newx = xtes)
+mse <- mean((lasso.pred - ytes) ^2)
+
+###################################
+#variables we need
+out<- glmnet(xtra, ytra, alpha = 1, lamda = lambdas)
+lasso.coef <- predict(out, type = "coefficients", s = bestlambda)[1:19,]
+all <- lasso.coef
+nonzero <- lasso.coef[lasso.coef != 0]
+names(nonzero)
+```
+
+```{r polyvar}
+#Error: vector memory exhausted (limit reached?)
+
+names(train_data_norm)
+lambdas1 <- c(0.001, 0.002, 0.003)
+
+covars <- c("market_fare", 
+            "ticket_carrier_no", "itin_id","mkt_id", "market_coupons",
+            "year", "quarter", "passengers", "market_distance",
+            "mkt_avgprice", "mkt_avgdist", "mkt_numfirms",
+            "mkt_hhi", "airline_avgprice", "airline_passangers",
+            "airline_avgdist")
+
+polyvars_train <- data.frame(poly(as.matrix(train_data_norm[,covars]), degree = 2, raw = T)) 
+polyvars_test <- data.frame(poly(as.matrix(test_data_norm[,covars]), degree = 2, raw = T)) 
+ 
+lassoseq <- glmnet(y = as.matrix(train_data_norm$market_fare), x = as.matrix(polyvars_train), alpha = 1, lambda = lambdas1)
+
+cvg_lasso_lambda <- cv.glmnet(y = as.matrix(train_data_norm$market_fare), 
+                              as.matrix(polyvars_train), 
+                              type.measure = "mse", 
+                              nfolds = 10, alpha = 1)$lambda.min
+
+cvg_lasso <- glmnet(y = as.matrix(train_data_norm$market_fare), 
+                    x = as.matrix(polyvars_train), 
+                    alpha = 1,lambda = cvg_lasso_lambda)
+
+lasso_mse <- mean((predict(cvg_lasso, as.matrix(polyvars_test), s=cvg_lasso_lambda) - test_data_norm$market_fare)^2)
+###################################
+#variables we need
+lasso.polyvar.coef <- predict(cvg_lasso, type = "coefficients", s = cvg_lasso_lambda)
+polyvar.all <- lasso.polyvar.coef
+```
+
+
+
+
+
