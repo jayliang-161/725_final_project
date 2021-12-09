@@ -1,0 +1,128 @@
+---
+title: "725_neuralnet"
+author: "hanzhi li"
+date: "2021/12/8"
+output: pdf_document
+---
+
+```{r step_1}
+library("neuralnet")
+library("tidyverse")
+library("dplyr")
+library("plyr")
+
+setwd("F:\\21fall\\725\\final project\\BTS data")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS12Q1.R")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS12Q2.R")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS12Q3.R")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS12Q4.R")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS14Q1.R")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS14Q2.R")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS14Q3.R")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS14Q4.R")
+
+
+class(AAUS12Q1) <- class(as.data.frame(AAUS12Q1))
+class(AAUS12Q2) <- class(as.data.frame(AAUS12Q2))
+class(AAUS12Q3) <- class(as.data.frame(AAUS12Q3))
+class(AAUS12Q4) <- class(as.data.frame(AAUS12Q4))
+class(AAUS14Q1) <- class(as.data.frame(AAUS14Q1))
+class(AAUS14Q2) <- class(as.data.frame(AAUS14Q2))
+class(AAUS14Q3) <- class(as.data.frame(AAUS14Q3))
+class(AAUS14Q4) <- class(as.data.frame(AAUS14Q4))
+
+set.seed(777)
+train12Q1 <- sample(nrow(AAUS12Q1), size = round(.5*(nrow(AAUS12Q1))) ) # set index
+train12Q2 <- sample(nrow(AAUS12Q2), size = round(.5*(nrow(AAUS12Q2))) ) 
+train12Q3 <- sample(nrow(AAUS12Q3), size = round(.5*(nrow(AAUS12Q3))) ) 
+train12Q4 <- sample(nrow(AAUS12Q4), size = round(.5*(nrow(AAUS12Q4))) )   
+train14Q1 <- sample(nrow(AAUS14Q1), size = round(.5*(nrow(AAUS14Q1))) )   
+train14Q2 <- sample(nrow(AAUS14Q2), size = round(.5*(nrow(AAUS14Q2))) )   
+train14Q3 <- sample(nrow(AAUS14Q3), size = round(.5*(nrow(AAUS14Q3))) )   
+train14Q4 <- sample(nrow(AAUS14Q4), size = round(.5*(nrow(AAUS14Q4))) )
+
+
+train_data <- rbind(AAUS12Q1[train12Q1,], AAUS12Q2[train12Q2,], AAUS12Q3[train12Q3,],
+                    AAUS12Q4[train12Q4,], AAUS14Q1[train14Q1,], AAUS14Q2[train14Q2,],
+                    AAUS14Q3[train12Q3,], AAUS14Q4[train14Q4,])
+test_data <- rbind(AAUS12Q1[-train12Q1,], AAUS12Q2[-train12Q2,], AAUS12Q3[-train12Q3,],
+                   AAUS12Q4[-train12Q4,], AAUS14Q1[-train14Q1,], AAUS14Q2[-train14Q2,],
+                   AAUS14Q3[-train12Q3,], AAUS14Q4[-train14Q4,])
+
+train_data$ticket_carrier_no <- as.numeric(revalue(train_data$ticket_carrier,
+                                                   c("AA"=1, "US"=0)))
+test_data$ticket_carrier_no <- as.numeric(revalue(test_data$ticket_carrier,
+                                                  c("AA"=1, "US"=0)))
+train_data$year[train_data$year == 2012] <- 0
+train_data$year[train_data$year == 2014] <- 1
+test_data$year[test_data$year == 2012] <- 0
+test_data$year[test_data$year == 2014] <- 1
+
+min_max_norm <- function(x){
+  (x-min(x))/(max(x)-min(x))
+}
+#apply Min-Max normalization to the following columns
+colname <-  c("market_fare", "origin_airport_id", "dest_airport_id",
+              "ticket_carrier_no", "itin_id", "mkt_id", "market_coupons",
+              "year", "quarter", "passengers",
+              "market_distance", "mkt_avgprice", "mkt_avgdist",
+              "mkt_numfirms", "mkt_hhi", "airline_avgprice",
+              "airline_passangers", "airline_avgdist")
+train_data_norm <- as.data.frame(lapply(train_data[,colname], min_max_norm))
+test_data_norm <- as.data.frame(lapply(test_data[,colname], min_max_norm))
+
+```
+
+```{r step_2}
+###################neuralnet#####################
+###################neuralnet#####################
+
+merge_data_q1 <- merge(AAUS12Q1, AAUS14Q1, all = TRUE)
+merge_data_q2 <- merge(AAUS12Q2, AAUS14Q2, all = TRUE)
+merge_data_q3 <- merge(AAUS12Q3, AAUS14Q3, all = TRUE)
+merge_data_q4 <- merge(AAUS12Q4, AAUS14Q4, all = TRUE)
+
+#####for Q1
+
+library(plyr)
+merge_data_q1$ticket_carrier_no <- as.numeric(revalue(merge_data_q1$ticket_carrier,
+                                                   c("AA"=1, "US"=0)))
+
+set.seed(777)
+testq1 <- sample(nrow(merge_data_q1), size = round(.5*(nrow(merge_data_q1))) ) 
+train_q1 <- merge_data_q1[-testq1,]
+test_q1 <- merge_data_q1[testq1,]
+
+merge_data_q1$year[train_q1$year == 2012] <- 0
+merge_data_q1$year[train_q1$year == 2014] <- 1
+
+
+train_q1 <- as.data.frame(lapply(train_q1[,colname], min_max_norm))
+test_q1 <- as.data.frame(lapply(test_q1[,colname], min_max_norm))
+
+train_q1$quarter <- 1
+
+nn <- neuralnet(market_fare ~ origin_airport_id + dest_airport_id + 
+                  ticket_carrier_no + itin_id + mkt_id + market_coupons +
+                  year +  passengers + 
+                  market_distance + mkt_avgprice + mkt_avgdist +
+                  mkt_numfirms + quarter + mkt_hhi + airline_avgprice + 
+                  airline_passangers + airline_avgdist,
+                data = train_q1, hidden = c(64, 32,
+                                                   16), rep = 1, linear.output = T)
+
+nnfit <- compute(nn, train_q1) # scaled fit
+
+maxs <- apply(merge_data_q1, 2, max)
+mins <- apply(merge_data_q1, 2, min)
+
+pr.nn_ <- nnfit$net.result * (max(merge_data_q1$market_fare) 
+                              - min(merge_data_q1$market_fare)) +
+  min(merge_data_q1$market_fare)
+test.r <- (train_q1) * (max(merge_data_q1$market_fare) -
+                                    min(merge_data_q1$market_fare)) 
+                                           + min(merge_data_q1$market_fare)
+
+MSE_nn_q1 <- mean((test.r - pr.nn_)^2) 
+MSE_nn_q1
+```
