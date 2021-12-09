@@ -1,0 +1,84 @@
+---
+title: "Randomforest"
+output: 
+  html_document:
+    toc: yes
+    toc_float: true
+    theme: cerulean
+    df_print: paged
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = FALSE,
+  comment = "##",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+# Load the data
+## data of 2012
+
+```{r}
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS12Q1.R")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS12Q2.R")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS12Q3.R")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS12Q4.R")
+data_12 <- rbind(AAUS12Q1, AAUS12Q2, AAUS12Q3, AAUS12Q4)
+data_12 <- data_12[,c('mkt_avgprice', 'mkt_avgdist', 'mkt_numfirms', 'mkt_hhi', 'airline_avgprice', 'airline_passangers', 'airline_avgdist')]
+data_12$label <- rep(0, nrow(data_12))
+dim(data_12)
+names(data_12)
+apply(data_12, 2, function(x){sum(is.na(x))})
+head(data_12)
+str(data_12)
+summary(data_12)
+```
+
+## data of 2014
+
+```{r}
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS14Q1.R")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS14Q2.R")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS14Q3.R")
+load(file ="F:\\21fall\\725\\725final_git\\data\\AAUS14Q4.R")
+data_34 <- rbind(AAUS14Q1, AAUS14Q2, AAUS14Q3, AAUS14Q4)
+data_34 <- data_34[,c('mkt_avgprice', 'mkt_avgdist', 'mkt_numfirms', 'mkt_hhi', 'airline_avgprice', 'airline_passangers', 'airline_avgdist')]
+data_34$label <- rep(1, nrow(data_34))
+dim(data_34)
+names(data_34)
+apply(data_34, 2, function(x){sum(is.na(x))})
+head(data_34)
+str(data_34)
+summary(data_34)
+```
+
+## merge data
+
+```{r}
+data_all <- rbind(data_12, data_34)
+```
+
+# Randomforest model
+## split the data
+
+```{r}
+library(caret)
+set.seed(100)
+index <- createDataPartition(data_all$label, p = 0.7, list = F)
+train <- data_all[index, ]
+test <- data_all[-index, ]
+print(paste('训练数据条数：', nrow(train), ';测试数据条数：', nrow(test), ';数据特征个数：', ncol(train) - 1, sep = ''))
+```
+## rf modle
+
+```{r}
+library(randomForest)
+library(Metrics)
+forest <- randomForest(as.factor(label)~., train, ntree = 50)
+pred_train <- predict(forest, train)
+pred_test <- predict(forest, test)
+print(paste('训练集准确率:', accuracy(train$label, as.numeric(as.character(pred_train))), sep = ""))
+print(paste('测试集准确率:', accuracy(test$label, as.numeric(as.character(pred_test))), sep = ""))
+```
